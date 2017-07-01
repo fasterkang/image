@@ -1,9 +1,7 @@
 <?php
-/**
- * User: sunkangYun@aliyun.com
- * Date: 2017/6/24
- * Time: 下午9:31
- */
+// +----------------------------------------------------------------------
+// | Author: fasterkang <sunkangYun@aliyun.com>
+// +----------------------------------------------------------------------
 namespace image;
 
 class Exception extends \RuntimeException

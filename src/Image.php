@@ -1,17 +1,19 @@
 <?php
-/**
- * User: sunkangYun@aliyun.com
- * Date: 2017/6/24
- * Time: 下午9:31
- */
+
+// +----------------------------------------------------------------------
+// | Author: fasterkang <sunkangYun@aliyun.com>
+// +----------------------------------------------------------------------
+
 namespace image;
 use image\Exception as ImageException;
+use image\Config as ImageConfig;
 
 class Image
 {
+    const DEFAULT_TTF  = 'STCAIYUN.TTF';
+
     //image src
     private static $imageSrc;
-
     //image width
     private static $width;
     //image width
@@ -24,6 +26,26 @@ class Image
     private static $imageResource;
     //self
     private static $self = null;
+    //default color
+    private static $rgb = array(
+        220,
+        220,
+        220
+    );
+    //default watermark fontsize
+    private static $fontsize = 50;
+    //default watermark angle
+    private static $angle    = 0;
+    //water coordinate x
+    private static $waterX   = 0;
+    //water coordinate x
+    private static $waterY   = 0;
+
+    //X axis offset multiple
+    private static $offsetXTimes = 1;
+
+    //Y axis offset multiple
+    private static $offsetYTimes = 1;
 
     private function __construct(){}
     /**
@@ -72,6 +94,7 @@ class Image
         {
             throw new ImageException('create image resource fail');
         }
+
     }
 
     /**
@@ -108,6 +131,21 @@ class Image
     public function getExtension()
     {
         return self::$extension;
+    }
+
+    /**
+     * @param array $times
+     * @return $this
+     */
+    public function setOffsetTimes(Array $times)
+    {
+        if (!empty($times))
+        {
+            list($x, $y) = $times;
+            self::$offsetXTimes = $x;
+            self::$offsetYTimes = $y;
+        }
+        return $this;
     }
 
     /**
@@ -150,7 +188,7 @@ class Image
     {
       $image = imagerotate(self::$imageResource, -$degrees, 0);
       self::$imageResource = $image;
-      self::$width = imagesx(self::$imageResource);
+      self::$width  = imagesx(self::$imageResource);
       self::$height = imagesy(self::$imageResource);
       return $this;
     }
@@ -185,7 +223,154 @@ class Image
 
         $function(self::$imageResource, $savePath);
 
+        imagedestroy(self::$imageResource);
+    }
+
+    /**
+     * Cut pic
+     * @param $thumb_width
+     * @param $thumb_height
+     * @return $this
+     */
+    public function thumb($thumb_width, $thumb_height = 0)
+    {
+        if (!is_numeric($thumb_width) || intval($thumb_width) < 0)
+        {
+            throw new ImageException('error params');
+        }
+
+        if ($thumb_width >= self::$width || $thumb_height >= self::$height)
+        {
+            return $this;
+        }
+
+        $scanX = $thumb_width / self::$width ;
+        if ($thumb_height > 0) $scanY = $thumb_height / self::$height;
+        else $scanY = 1;
+        $scan   = min($scanX, $scanY);
+        $width  =  $scan * self::$width;
+        $height = $scan * self::$height;
+        $this->resize(self::$width, self::$height, 0, 0, $width, $height);
+        return $this;
+
+    }
+
+
+    /**
+     * text watermark
+     * @param $text
+     * @param null $position
+     * @param null $fontSize
+     * @param null $fontpath
+     * @param null $angle
+     * @param array $rgb
+     * @return $this
+     */
+    public function watermark($text,$position = null ,$fontSize = null ,$fontpath = null, $angle = null, Array $rgb = array())
+    {
+        if (empty($text))
+        {
+            throw new ImageException('watermater content miss');
+        }
+
+        $imageContent = file_get_contents(self::$imageSrc);
+        $dist = imagecreatefromstring($imageContent);
+        if (is_null($fontpath))
+        {
+            $fontpath = __DIR__.DIRECTORY_SEPARATOR.'ttf'.DIRECTORY_SEPARATOR.self::DEFAULT_TTF;
+        }
+
+        if (!empty($rgb))
+        {
+            if (isset($rgb[0])) self::$rgb[0] = $rgb[0];
+            if (isset($rgb[1])) self::$rgb[1] = $rgb[1];
+            if (isset($rgb[2])) self::$rgb[2] = $rgb[2];
+        }
+
+        $background = imagecolorallocate($dist, self::$rgb[0], self::$rgb[1], self::$rgb[2]);
+
+        if (!is_null($fontSize))
+        {
+            self::$fontsize = $fontSize;
+        }
+
+        if (!is_null($angle))
+        {
+            self::$angle = $angle;
+        }
+        $box = imagettfbbox(self::$fontsize, self::$angle, $fontpath, $text);
+
+        if (is_null($position))
+        {
+            $position = ImageConfig::$WATER_CENTER_CENTER;
+        }
+
+        self::setWaterXy($box, $position);
+        //x,y是水印字体的左下角
+        imagefttext($dist, self::$fontsize, self::$angle, self::$waterX, self::$waterY, $background, $fontpath, $text);
+        self::$imageResource = $dist;
         return $this;
     }
+
+    /**
+     * set watermark x,y coordinate
+     * @param $box
+     * @param $position
+     */
+    protected static function setWaterXy($box, $position)
+    {
+        $minx = min($box[0], $box[2], $box[4], $box[6]);
+        $miny = min($box[1], $box[3], $box[5], $box[7]);
+
+        $water_width =  abs($box[4] - $box[0]);
+        $water_height = abs($box[5] - $box[1]);
+        switch ($position)
+        {
+            case 1:
+                $x = $y = 0;
+                break;
+            case 2:
+                $x = (self::$width - $water_width) / 2;
+                $y = 0;
+                break;
+            case 3:
+                $x = self::$width - $water_width;
+                $y = 0;
+                break;
+            case 4:
+                $x = 0;
+                $y = (self::$height - $water_height) / 2;
+                break;
+            case 5:
+                $x = (self::$width - $water_width) / 2;
+                $y = (self::$height - $water_height) / 2;
+                break;
+            case 6:
+                $x = self::$width - $water_width;
+                $y = (self::$height - $water_height) / 2;
+                break;
+            case 7:
+                $x = 0;
+                $y = self::$height - $water_height;
+                break;
+            case 8:
+                $x = (self::$width - $water_width) / 2;
+                $y = self::$height - $water_height;
+                break;
+            case 9:
+                $x = self::$width - $water_width;
+                $y = self::$height - $water_height;
+                break;
+            case 10:
+                $x = ((self::$width - $water_width) / 2) * self::$offsetXTimes;
+                $y = ((self::$height - $water_height) / 2) * self::$offsetYTimes;
+                break;
+            default:
+                break;
+        }
+        self::$waterX = $x + abs($minx);
+        self::$waterY = $y + abs($miny);
+    }
+
 }
 
