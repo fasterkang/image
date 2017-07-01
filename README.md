@@ -9,7 +9,7 @@ use image\Image
 
 + 裁剪
 + ~~~
- Image::createImage('100.jpg')->resize(100,100)->output()
+  Image::createImage('100.jpg')->resize(100,100)->output()
  
   
 + 旋转
